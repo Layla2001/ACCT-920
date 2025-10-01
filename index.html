@@ -1,21 +1,12 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <!-- <title>Survey + Live Results</title> -->
-  <header>
-    <h1> <strong>ACCT 922 — Final Presentation Date (Fall 2025) </strong></h1>
-  </header>
-  Please select your preferred presentation date. Presentations are <strong>10 minutes</strong>, followed by <strong>5
-    minutes</strong>strong> of Q&A.
-  
-  Dates: <strong>Monday, November 17</strong> or <strong>Wednesday, November 19</strong>.
-  Choose <strong>one</strong> option below. If both dates work, select “Either date works.”
-
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <meta charset="utf-8" />
+  <title>ACCT 922 — Final Presentation Poll (Fall 2025)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0f172a0d;
@@ -38,7 +29,8 @@
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
-    header {
+    /* Page header */
+    header.page {
       position: sticky; top: 0; z-index: 10;
       backdrop-filter: blur(6px);
       background: rgba(255,255,255,.75);
@@ -75,7 +67,6 @@
       border: 1px solid #eaeef3;
     }
     .card > header {
-      position: initial;
       background: linear-gradient(0deg, #fff, #fff);
       border: none;
       padding: 16px 18px;
@@ -83,9 +74,7 @@
     .card h2 { margin: 0; font-size: 16px; font-weight: 600; }
     .content { padding: 16px 18px 20px; }
     .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
-    .toolbar {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
-    }
+    .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .btn {
       cursor: pointer; border: 0; padding: 10px 12px; border-radius: 12px;
       background: var(--brand-weak); color: var(--text); font-weight: 500;
@@ -97,25 +86,29 @@
       background: #fbfbfe; border: 1px solid #eceef8; border-radius: 14px;
       padding: 14px; min-height: 280px;
     }
-    #liveChart {
-      width: 100%; height: auto; display: block; border-radius: 10px;
-    }
+    #liveChart { width: 100%; height: auto; display: block; border-radius: 10px; }
     iframe {
       width: 100%; border: 0; background: #fff; border-radius: 14px;
       min-height: 1200px;
     }
-    .footNote {
-      padding: 10px 18px 16px; font-size: 12px; color: var(--muted);
-    }
+    .footNote { padding: 10px 18px 16px; font-size: 12px; color: var(--muted); }
+    .lede { max-width: var(--maxw); margin: 12px auto 0; padding: 0 18px; color: var(--muted); }
   </style>
 </head>
 <body>
-  <header>
+  <header class="page">
     <div class="nav">
       <div class="dot" aria-hidden="true"></div>
       <h1>ACCT 922 — Final Presentation Poll</h1>
     </div>
   </header>
+
+  <p class="lede">
+    Please select your preferred presentation date. Presentations are
+    <strong>10 minutes</strong>, followed by <strong>5 minutes</strong> of Q&amp;A.
+    Dates: <strong>Monday, November 17</strong> or <strong>Wednesday, November 19</strong>.
+    Choose <strong>one</strong> option below. If both dates work, select “Either date works.”
+  </p>
 
   <main class="wrap">
     <!-- Live chart -->
@@ -127,7 +120,12 @@
           <span class="meta" id="lastRef">Last refresh: never</span>
         </div>
         <div class="chartShell">
-          <img id="liveChart" alt="Live chart" loading="lazy" src="https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pubchart?oid=557204739&format=png">
+          <img
+            id="liveChart"
+            alt="Live chart"
+            loading="lazy"
+            src="https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pubchart?oid=557204739&format=png"
+          />
         </div>
         <div class="meta">Updates every 30 seconds while the page is open.</div>
       </div>
@@ -137,7 +135,10 @@
     <section class="card">
       <header><h2>Survey</h2></header>
       <div class="content">
-        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true" allowfullscreen>Loading…</iframe>
+        <iframe
+          src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true"
+          allowfullscreen
+        >Loading…</iframe>
       </div>
       <div class="footNote">Tip: if your form is longer/shorter, adjust the iframe height in the HTML.</div>
     </section>
@@ -146,15 +147,14 @@
   <script>
     const img = document.getElementById('liveChart');
     const lastRef = document.getElementById('lastRef');
+
     function refreshChart() {
       const u = new URL(img.src);
-      u.searchParams.set('cb', Date.now());
+      u.searchParams.set('cb', Date.now()); // cache-buster
       img.src = u.toString();
       lastRef.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
     }
+
     document.getElementById('refreshBtn').addEventListener('click', refreshChart);
     setInterval(refreshChart, 30000);
-    window.addEventListener('load', () => setTimeout(refreshChart, 300));
-  </script>
-</body>
-</html>
+    window
