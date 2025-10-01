@@ -1,298 +1,190 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>ACCT 922 — Final Presentation Poll (Fall 2025)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- Disable caching -->
-  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <title>ACCT 922 — Final Presentation Date (Fall 2025)</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
-    :root {
-      --bg: #0f172a0d;
-      --card: #ffffff;
-      --text: #0f172a;
-      --muted: #64748b;
-      --brand: #6366f1;
-      --brand-weak: #eef2ff;
-      --ring: 0 0 0 6px rgba(99,102,241,.15);
-      --radius: 18px;
-      --shadow: 0 10px 30px rgba(2, 6, 23, .08);
-      --maxw: 1100px;
+    :root{
+      --bg:#0b0c10; --card:#151924; --ink:#eaf0ff; --muted:#a9b1c6; --accent:#7c5cff; --border:#263042;
     }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      background: linear-gradient(180deg, #f8fafc, #eef2f7);
-      color: var(--text);
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
-    }
-    /* Page header */
-    header.page {
-      position: sticky; top: 0; z-index: 10;
-      backdrop-filter: blur(6px);
-      background: rgba(255,255,255,.75);
-      border-bottom: 1px solid #e5e7eb;
-    }
-    .nav {
-      max-width: var(--maxw);
-      margin: 0 auto;
-      padding: 16px 18px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .dot {
-      width: 10px; height: 10px; border-radius: 9999px; background: var(--brand);
-      box-shadow: 0 0 0 6px rgba(99,102,241,.15);
-    }
-    h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: .2px; }
-    .wrap {
-      max-width: var(--maxw);
-      margin: 22px auto;
-      padding: 0 18px 28px;
-      display: grid;
-      gap: 22px;
-    }
-    @media (min-width: 980px) {
-      .wrap { grid-template-columns: 1fr 1fr; }
-    }
-    .card {
-      background: var(--card);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-      border: 1px solid #eaeef3;
-    }
-    .card > header {
-      background: linear-gradient(0deg, #fff, #fff);
-      border: none;
-      padding: 16px 18px;
-    }
-    .card h2 { margin: 0; font-size: 16px; font-weight: 600; }
-    .content { padding: 16px 18px 20px; }
-    .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
-    .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-    .btn {
-      cursor: pointer; border: 0; padding: 10px 12px; border-radius: 12px;
-      background: var(--brand-weak); color: var(--text); font-weight: 500;
-      transition: transform .06s ease, box-shadow .1s ease, background .2s ease;
-    }
-    .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
-    .btn:active { transform: translateY(0); box-shadow: none; }
-    .chartShell {
-      background: #fbfbfe; border: 1px solid #eceef8; border-radius: 14px;
-      padding: 14px; min-height: 280px;
-    }
-    #resultsChart { width: 100%; height: 420px; display: block; border-radius: 10px; }
-    iframe {
-      width: 100%; border: 0; background: #fff; border-radius: 14px;
-      min-height: 1200px;
-    }
-    .footNote { padding: 10px 18px 16px; font-size: 12px; color: var(--muted); }
-    .lede { max-width: var(--maxw); margin: 12px auto 0; padding: 0 18px; color: var(--muted); }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b0c10,#0f1220 30%,#0b0c10);color:var(--ink)}
+    .wrap{max-width:1100px;margin:32px auto;padding:0 20px}
+    header{display:grid;gap:14px;margin-bottom:18px}
+    h1{font-weight:800;letter-spacing:0.2px;margin:0;font-size:clamp(24px,2.4vw,36px)}
+    .subtitle{color:var(--muted);font-size:1.05rem}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.25);overflow:hidden}
+    .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:20px}
+    @media (max-width: 960px){.grid{grid-template-columns:1fr;}}
+    .section{padding:18px}
+    .section h2{margin:0 0 10px 0;font-size:1.05rem;font-weight:700;color:#cbd5ff}
+    .muted{color:var(--muted)}
+    iframe{width:100%;height:720px;border:0;border-top-left-radius:18px;border-top-right-radius:18px}
+    .toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:14px 18px;border-top:1px solid var(--border);background:#101424}
+    .btn{appearance:none;border:1px solid var(--border);background:linear-gradient(180deg,#222a3a,#1a2131);color:#fff;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;transition:.2s transform,.2s box-shadow}
+    .btn:active{transform:translateY(1px)}
+    .btn-outline{background:transparent}
+    .small{font-size:.9rem;color:var(--muted)}
+    .chartWrap{padding:6px 12px 18px 12px}
+    canvas{width:100% !important;height:380px !important}
+    .note{font-size:.95rem;color:var(--muted);line-height:1.55}
+    .pill{display:inline-block;background:#1e2536;color:#cbd5ff;border:1px solid var(--border);padding:4px 10px;border-radius:999px;font-size:.85rem;margin-right:8px}
   </style>
 </head>
 <body>
-  <header class="page">
-    <div class="nav">
-      <div class="dot" aria-hidden="true"></div>
-      <h1>ACCT 922 — Final Presentation Poll</h1>
-    </div>
-  </header>
+  <div class="wrap">
+    <header>
+      <h1>ACCT 922 — Final Presentation Date (Fall 2025)</h1>
+      <p class="subtitle">Please select your preferred presentation date. Presentations are <strong>10 minutes</strong>, followed by <strong>5 minutes</strong> of Q&amp;A.</p>
+      <p class="note"><span class="pill">Dates</span> <strong>Monday, November 17</strong> or <strong>Wednesday, November 19</strong>.<br/>Choose <em>one</em> option below. If both dates work, select <em>“Either date works.”</em></p>
+    </header>
 
-  <p class="lede">
-    Please select your preferred presentation date. Presentations are
-    <strong>10 minutes</strong>, followed by <strong>5 minutes</strong> of Q&amp;A.
-    Dates: <strong>Monday, November 17</strong> or <strong>Wednesday, November 19</strong>.
-    Choose <strong>one</strong> option below. If both dates work, select “Either date works.”
-  </p>
-
-  <main class="wrap">
-    <!-- Live chart -->
-    <section class="card">
-      <header><h2>Live Results</h2></header>
-      <div class="content">
+    <div class="grid">
+      <!-- Left: the Google Form -->
+      <div class="card">
+        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true" title="ACCT 922 Form" allow="clipboard-write *;">
+          Loading…
+        </iframe>
         <div class="toolbar">
-          <button id="refreshBtn" class="btn" title="Fetch latest CSV">Refresh chart</button>
-          <span class="meta" id="lastRef">Last refresh: never</span>
-        </div>
-
-        <div class="chartShell">
-          <canvas id="resultsChart"></canvas>
+          <div class="small">Submit above, then refresh the results on the right.</div>
+          <button class="btn" id="refreshBoth">Refresh live results</button>
         </div>
       </div>
-    </section>
 
-    <!-- Form -->
-    <section class="card">
-      <header><h2>Survey</h2></header>
-      <div class="content">
-        <iframe
-          src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true"
-          allowfullscreen
-        >Loading…</iframe>
+      <!-- Right: Live results chart -->
+      <div class="card">
+        <div class="section">
+          <h2>Live Poll Results</h2>
+          <p class="muted" id="resultMeta">Fetching latest CSV…</p>
+        </div>
+        <div class="chartWrap">
+          <canvas id="resultsChart" aria-label="Bar chart of poll results" role="img"></canvas>
+        </div>
+        <div class="toolbar">
+          <div class="small" id="updatedAt">Last updated —</div>
+          <div>
+            <button class="btn btn-outline" id="downloadCsv">Download CSV</button>
+            <button class="btn" id="refreshBtn">Refresh</button>
+          </div>
+        </div>
       </div>
-      <div class="footNote">Tip: if your form is longer/shorter, adjust the iframe height in the HTML.</div>
-    </section>
-  </main>
+    </div>
 
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <p class="note" style="margin-top:18px">This page embeds the Google Form and visualizes the responses from its published CSV (<code>File &gt; Share &gt; Publish to the web</code>). Click <strong>Refresh</strong> to grab the newest CSV and update the chart immediately.</p>
+  </div>
+
   <script>
-    // --- CONFIG ---
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
-    const lastRefEl = document.getElementById('lastRef');
-    const refreshBtn = document.getElementById('refreshBtn');
 
-    // Canonical labels + aliases -> keeps bar order stable
-    const LABEL_ORDER = [
-      'Monday, November 17',
-      'Wednesday, November 19',
-      'Either date works'
-    ];
-    const ALIASES = new Map([
-      [/^mon(day)?[, ]*nov(ember)?\.?\s*17/i, 'Monday, November 17'],
-      [/^wed(nesday)?[, ]*nov(ember)?\.?\s*19/i, 'Wednesday, November 19'],
-      [/either/i, 'Either date works'],
-    ]);
+    const state = { raw: [], header: [], counts: new Map(), chart: null, labelColumn: null };
 
-    let chart;        // single Chart.js instance
-    let inFlight;     // AbortController for safe replacing fetches
-    let isFetching = false;
-
-    // --- FETCH (fresh only) ---
-    async function fetchCSVFresh(url) {
-      if (inFlight) inFlight.abort();
-      inFlight = new AbortController();
+    function cacheBust(url){
       const u = new URL(url);
-      // hard cache-bust
-      u.searchParams.set('cb', Date.now().toString());
-
-      const res = await fetch(u.toString(), { cache: 'no-store', signal: inFlight.signal });
-      if (!res.ok) throw new Error(`CSV fetch failed: HTTP ${res.status}`);
-      return res.text();
+      u.searchParams.set('_', Date.now().toString());
+      return u.toString();
     }
 
-    // --- CSV PARSER (handles quoted fields/commas) ---
-    function splitCSV(line) {
-      const out = [];
-      let cur = '', q = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-          const next = line[i + 1];
-          if (q && next === '"') { cur += '"'; i++; continue; } // escaped quote
-          q = !q; continue;
-        }
-        if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
-        cur += ch;
+    function detectChoiceColumn(headers){
+      // Try to select the column that looks like the poll question (avoid Timestamp)
+      const lower = headers.map(h => h.toLowerCase());
+      // 1) contains preferred/date/option/choice
+      let idx = lower.findIndex(h => /(preferred|date|option|choice)/.test(h) && !/timestamp/.test(h));
+      if(idx !== -1) return idx;
+      // 2) last non-timestamp column
+      for(let i=lower.length-1;i>=0;i--){
+        if(!/timestamp/.test(lower[i]) && lower[i].trim()!== '') return i;
       }
-      out.push(cur);
-      return out.map(s => s.trim());
+      return Math.max(0, headers.length-1);
     }
 
-    function parseCSV(text) {
-      const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
-      if (!lines.length) return { counts: new Map() };
+    async function loadCsv(){
+      const res = await fetch(cacheBust(CSV_URL), {cache:'no-store'});
+      if(!res.ok) throw new Error('Network error '+res.status);
+      const text = await res.text();
+      return new Promise((resolve)=>{
+        Papa.parse(text, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results)=> resolve(results)
+        });
+      });
+    }
 
-      const header = splitCSV(lines[0]);
-      const rows = lines.slice(1).map(splitCSV);
+    function computeCounts(rows, headers){
+      const choiceIdx = detectChoiceColumn(headers);
+      state.labelColumn = headers[choiceIdx];
+      const counts = new Map();
+      for(const row of rows){
+        const keys = Object.keys(row);
+        const label = row[keys[choiceIdx]]?.trim();
+        if(!label) continue;
+        counts.set(label, (counts.get(label)||0)+1);
+      }
+      return counts;
+    }
 
-      const idxLabel = header.findIndex(c => /option|choice|date/i.test(c));
-      const idxValue = header.findIndex(c => /vote|count|responses?|tally|#/i.test(c));
-      const li = idxLabel >= 0 ? idxLabel : 0;
-      const vi = idxValue >= 0 ? idxValue : 1;
+    function renderChart(){
+      const labels = Array.from(state.counts.keys());
+      const data = Array.from(state.counts.values());
 
-      const norm = (s='') => {
-        for (const [re, target] of ALIASES) if (re.test(s)) return target;
-        return s;
+      const ds = {
+        label: 'Responses',
+        data,
+        borderWidth: 1
       };
 
-      const counts = new Map(LABEL_ORDER.map(l => [l, 0]));
-      for (const parts of rows) {
-        const rawL = parts[li] ?? '';
-        const rawV = parts[vi] ?? '0';
-        const val = Number(String(rawV).replace(/[^0-9.-]/g, '')) || 0;
-        const label = norm(rawL);
-        if (!counts.has(label)) counts.set(label, 0); // include unexpected label
-        counts.set(label, (counts.get(label) || 0) + val);
-      }
-      return { counts };
-    }
-
-    // --- CHART ---
-    function ensureChart() {
-      if (chart) return chart;
       const ctx = document.getElementById('resultsChart').getContext('2d');
-      chart = new Chart(ctx, {
+      if(state.chart){ state.chart.destroy(); }
+      state.chart = new Chart(ctx, {
         type: 'bar',
-        data: { labels: [], datasets: [{ label: 'Responses', data: [] }] },
+        data: { labels, datasets: [ds] },
         options: {
-          responsive: true,
           maintainAspectRatio: false,
-          animation: false,         // no animation on updates
-          normalized: true,
-          parsing: false,
+          scales: {
+            y: { beginAtZero: true, ticks: { precision:0 } }
+          },
           plugins: {
             legend: { display: false },
-            tooltip: { mode: 'index', intersect: false }
-          },
-          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            tooltip: { callbacks: { label: (ctx)=> `${ctx.parsed.y} response${ctx.parsed.y===1?'':'s'}` } },
+            title: { display: true, text: state.labelColumn || 'Responses' }
+          }
         }
       });
-      return chart;
     }
 
-    function updateChartFromMap(map) {
-      // stable order: known labels first, then any extras alphabetical
-      const extras = [...map.keys()].filter(k => !LABEL_ORDER.includes(k)).sort((a,b)=>a.localeCompare(b));
-      const ordered = [...LABEL_ORDER, ...extras];
-
-      const ch = ensureChart();
-      ch.data.labels = ordered;
-      ch.data.datasets[0].data = ordered.map(l => map.get(l) ?? 0);
-      ch.update();
-    }
-
-    // --- ONE-SHOT REFRESH ---
-    async function refreshChartData() {
-      if (isFetching) return;
-      isFetching = true;
-      refreshBtn.disabled = true;
-      lastRefEl.textContent = 'Refreshing…';
-      try {
-        const csv = await fetchCSVFresh(CSV_URL);
-        const { counts } = parseCSV(csv);
-        updateChartFromMap(counts);
-        lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
-      } finally {
-        refreshBtn.disabled = false;
-        isFetching = false;
+    async function refresh(){
+      const start = performance.now();
+      const meta = document.getElementById('resultMeta');
+      meta.textContent = 'Fetching latest CSV…';
+      try{
+        const { data, meta: m } = await loadCsv();
+        state.raw = data; state.header = m.fields || Object.keys(data[0]||{});
+        state.counts = computeCounts(state.raw, state.header);
+        renderChart();
+        const took = Math.max(1, Math.round(performance.now()-start));
+        document.getElementById('updatedAt').textContent = `Last updated — ${new Date().toLocaleString()} • ${took} ms`;
+        const total = Array.from(state.counts.values()).reduce((a,b)=>a+b,0);
+        meta.textContent = `${total} total responses`;        
+      }catch(err){
+        console.error(err);
+        meta.textContent = 'Failed to fetch CSV. Please try again.';
       }
     }
 
-    // --- INIT (only on new page open or manual Refresh) ---
-    window.addEventListener('DOMContentLoaded', () => {
-      ensureChart();      // create once
-      refreshChartData(); // fetch fresh CSV once on load
+    document.getElementById('refreshBtn').addEventListener('click', refresh);
+    document.getElementById('refreshBoth').addEventListener('click', refresh);
+    document.getElementById('downloadCsv').addEventListener('click', ()=>{
+      window.open(CSV_URL, '_blank');
     });
 
-    refreshBtn.addEventListener('click', () => {
-      // Re-fetch once (also cache-busted)
-      refreshChartData();
-    });
+    // Auto-refresh on first load
+    refresh();
   </script>
 </body>
 </html>
