@@ -162,6 +162,8 @@
 
   let chart;
   let inFlight; // AbortController
+  let isFetching = false;
+  let timer = null;
 
   // --- FETCH (overlap-safe, cache-busted) ---
   async function fetchCSV(url) {
@@ -195,7 +197,7 @@
 
   function parseCSV(text) {
     const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
-    if (!lines.length) return { labels: [], values: [] };
+    if (!lines.length) return { labels: [], values: [], counts: new Map() };
 
     const header = splitCSV(lines[0]);
     const rows = lines.slice(1).map(splitCSV);
@@ -205,30 +207,21 @@
     const li = idxLabel >= 0 ? idxLabel : 0;
     const vi = idxValue >= 0 ? idxValue : 1;
 
-    // normalize labels via aliases
     const norm = (s='') => {
       for (const [re, target] of ALIASES) if (re.test(s)) return target;
       return s;
     };
 
-    // aggregate counts by canonical label
     const counts = new Map(LABEL_ORDER.map(l => [l, 0]));
     for (const parts of rows) {
       const rawL = parts[li] ?? '';
       const rawV = parts[vi] ?? '0';
       const val = Number(String(rawV).replace(/[^0-9.-]/g, '')) || 0;
       const label = norm(rawL);
-      if (!counts.has(label)) counts.set(label, 0); // allow unexpected label
+      if (!counts.has(label)) counts.set(label, 0);
       counts.set(label, (counts.get(label) || 0) + val);
     }
-
-    // build ordered arrays (unknown labels appended)
-    const ordered = [...LABEL_ORDER, ...[...counts.keys()].filter(k => !LABEL_ORDER.includes(k))];
-    return {
-      labels: ordered,
-      values: ordered.map(l => counts.get(l) || 0),
-      counts
-    };
+    return { counts };
   }
 
   // --- CHART ---
@@ -240,8 +233,14 @@
       data: { labels: [], datasets: [{ label: 'Responses', data: [] }] },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         animation: false,
-        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+        normalized: true,      // small perf win
+        parsing: false,        // we feed plain arrays
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
+        },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
@@ -249,16 +248,17 @@
   }
 
   function updateChartFromMap(map) {
-    const ordered = [...LABEL_ORDER, ...[...map.keys()].filter(k => !LABEL_ORDER.includes(k))];
+    // stable order: known labels first, then any unexpected ones in alpha order
+    const extras = [...map.keys()].filter(k => !LABEL_ORDER.includes(k)).sort((a,b)=>a.localeCompare(b));
+    const ordered = [...LABEL_ORDER, ...extras];
+
     const ch = ensureChart();
     ch.data.labels = ordered;
-    ch.data.datasets[0].data = ordered.map(l => map.get(l) || 0);
+    ch.data.datasets[0].data = ordered.map(l => map.get(l) ?? 0);
     ch.update();
   }
 
   // --- REFRESH LOOP ---
-  let isFetching = false;
-
   async function refreshChartData() {
     if (isFetching) return; // Prevent overlap
     isFetching = true;
@@ -267,8 +267,6 @@
     try {
       const csv = await fetchCSV(CSV_URL);
       const parsed = parseCSV(csv);
-      if (!parsed.labels.length) throw new Error('No rows parsed.');
-      // Display the most recent CSV values directly (no stabilization)
       updateChartFromMap(parsed.counts);
       lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
     } catch (err) {
@@ -280,18 +278,30 @@
     }
   }
 
-  // Pause polling when tab hidden
-  let timer = null;
   function startTimer() { if (!timer) timer = setInterval(refreshChartData, POLL_MS); }
   function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
 
-  // Reset polling after manual refresh
+  // --- UI HANDLERS ---
   refreshBtn.addEventListener('click', () => {
     refreshChartData();
     stopTimer();
     startTimer();
   });
+
+  // Pause polling when tab hidden
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stopTimer();
+    else { refreshChartData(); startTimer(); }
+  });
+
+  // --- INITIALIZE ON FIRST OPEN ---
+  window.addEventListener('DOMContentLoaded', () => {
+    ensureChart();          // create once
+    refreshChartData();     // immediate first render
+    startTimer();           // then poll
+  });
 </script>
+
 
 
 </body>
