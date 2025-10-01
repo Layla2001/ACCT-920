@@ -296,31 +296,41 @@
   }
 
   // --- REFRESH LOOP ---
-  async function refreshChartData() {
-    try {
-      const csv = await fetchCSV(CSV_URL);
-      const parsed = parseCSV(csv);
-      if (!parsed.labels.length) throw new Error('No rows parsed.');
-      updateChartFromMap(parsed.counts);
+  let isFetching = false;
 
-      lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
-    }
+async function refreshChartData() {
+  if (isFetching) return; // Prevent overlap
+  isFetching = true;
+  refreshBtn.disabled = true;
+  lastRefEl.textContent = "Refreshing…";
+  try {
+    const csv = await fetchCSV(CSV_URL);
+    const parsed = parseCSV(csv);
+    if (!parsed.labels.length) throw new Error('No rows parsed.');
+    updateChartFromMap(parsed.counts); // no stabilization
+    lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
+  } finally {
+    refreshBtn.disabled = false;
+    isFetching = false;
   }
+}
+
+
 
   // Pause polling when tab hidden (reduces race/wobble)
   let timer = null;
   function startTimer() { if (!timer) timer = setInterval(refreshChartData, POLL_MS); }
   function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
 
-  refreshBtn.addEventListener('click', refreshChartData);
-  window.addEventListener('load', () => { setTimeout(refreshChartData, 300); startTimer(); });
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { stopTimer(); }
-    else { refreshChartData(); startTimer(); }
-  });
+  // Reset polling after manual refresh
+refreshBtn.addEventListener('click', () => {
+  refreshChartData();
+  stopTimer();
+  startTimer();
+});
 </script>
 
 
