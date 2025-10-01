@@ -298,27 +298,27 @@
   // --- REFRESH LOOP ---
   let isFetching = false;
 
-async function refreshChartData() {
-  if (isFetching) return; // Prevent overlap
-  isFetching = true;
-  refreshBtn.disabled = true;
-  lastRefEl.textContent = "Refreshing…";
-  try {
-    const csv = await fetchCSV(CSV_URL);
-    const parsed = parseCSV(csv);
-    if (!parsed.labels.length) throw new Error('No rows parsed.');
-    updateChartFromMap(parsed.counts); // no stabilization
-    lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
-  } finally {
-    refreshBtn.disabled = false;
-    isFetching = false;
+  async function refreshChartData() {
+    if (isFetching) return; // Prevent overlap
+    isFetching = true;
+    refreshBtn.disabled = true;
+    lastRefEl.textContent = "Refreshing…";
+    try {
+      const csv = await fetchCSV(CSV_URL);
+      const parsed = parseCSV(csv);
+      if (!parsed.labels.length) throw new Error('No rows parsed.');
+      // Apply stabilization to reduce flicker and prevent counts from decreasing
+      const stabilized = stabilize(parsed.counts);
+      updateChartFromMap(stabilized);
+      lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
+    } finally {
+      refreshBtn.disabled = false;
+      isFetching = false;
+    }
   }
-}
-
-
 
   // Pause polling when tab hidden (reduces race/wobble)
   let timer = null;
@@ -326,11 +326,11 @@ async function refreshChartData() {
   function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
 
   // Reset polling after manual refresh
-refreshBtn.addEventListener('click', () => {
-  refreshChartData();
-  stopTimer();
-  startTimer();
-});
+  refreshBtn.addEventListener('click', () => {
+    refreshChartData();
+    stopTimer();
+    startTimer();
+  });
 </script>
 
 
