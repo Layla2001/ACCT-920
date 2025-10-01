@@ -301,8 +301,8 @@
       const csv = await fetchCSV(CSV_URL);
       const parsed = parseCSV(csv);
       if (!parsed.labels.length) throw new Error('No rows parsed.');
-      const stable = stabilize(parsed.counts);
-      updateChartFromMap(stable);
+      updateChartFromMap(parsed.counts);
+
       lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
     } catch (err) {
       if (err.name === 'AbortError') return;
