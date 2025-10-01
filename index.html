@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Survey + Live Results</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --maxw: 1200px;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+            margin: 0;
+            background: #f6f7fb;
+        }
+
+        header {
+            padding: 24px;
+            text-align: center;
+            background: white;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        .wrap {
+            max-width: var(--maxw);
+            margin: 24px auto;
+            padding: 0 16px;
+            display: grid;
+            gap: 20px;
+        }
+
+        @media (min-width: 960px) {
+            .wrap {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, .06);
+            padding: 16px;
+        }
+
+        .card h2 {
+            margin: 8px 8px 12px;
+            font-size: 18px;
+        }
+
+        .chart-box {
+            display: grid;
+            gap: 10px;
+        }
+
+        .meta {
+            font-size: 12px;
+            color: #666;
+            margin: 0 8px;
+        }
+
+        img,
+        iframe {
+            width: 100%;
+            border: 0;
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            margin: 0 8px 8px;
+        }
+
+        button {
+            cursor: pointer;
+            border: 0;
+            border-radius: 10px;
+            padding: 8px 10px;
+            background: #eef1ff;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Survey + Live Results</h1>
+    </header>
+
+    <main class="wrap">
+        <!-- Live chart -->
+        <section class="card chart-box">
+            <h2>Live Results</h2>
+            <div class="controls">
+                <button id="refreshBtn" title="Force refresh">Refresh chart</button>
+                <p class="meta" id="lastRef">Last refresh: never</p>
+            </div>
+            <img id="liveChart" alt="Live chart"
+                src="https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pubchart?oid=557204739&format=image">
+            <p class="meta">This chart auto-refreshes every 30s while the page is open.</p>
+        </section>
+
+        <!-- Form -->
+        <section class="card">
+            <h2>Survey</h2>
+            <iframe
+                src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true"
+                width="640" height="809" frameborder="0" marginheight="0" marginwidth="0">Loading…</iframe>
+
+            <p class="meta">Tip: adjust the iframe height if your form is longer/shorter.</p>
+        </section>
+    </main>
+
+
+    <script>
+        // Cache-bust the chart so the browser fetches the newest pixels
+        const img = document.getElementById('liveChart');
+        const lastRef = document.getElementById('lastRef');
+        function refreshChart() {
+            const u = new URL(img.src);
+            u.searchParams.set('cb', Date.now()); // cache-buster
+            img.src = u.toString();
+            lastRef.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+        }
+        document.getElementById('refreshBtn').addEventListener('click', refreshChart);
+        // Auto-refresh every 30s
+        setInterval(refreshChart, 30000);
+        // Initial cache-bust shortly after load
+        window.addEventListener('load', () => setTimeout(refreshChart, 300));
+    </script>
+</body>
+
+</html>
