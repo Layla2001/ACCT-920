@@ -160,14 +160,8 @@
     [/either/i, 'Either date works'],
   ]);
 
-  // Anti-flicker settings
-  const HISTORY_WINDOW = 3;         // median over last 3 pulls
-  const ENFORCE_MONOTONIC = true;   // counts cannot go down per label
-
   let chart;
   let inFlight; // AbortController
-  const history = []; // array of { counts: Map<label, number>, total, ts }
-  const lastMaxSeen = new Map(); // per-label maximum (for monotonic)
 
   // --- FETCH (overlap-safe, cache-busted) ---
   async function fetchCSV(url) {
@@ -237,39 +231,6 @@
     };
   }
 
-  // --- STABILIZE (median + monotonic) ---
-  function median(nums) {
-    const a = [...nums].sort((x, y) => x - y);
-    const m = Math.floor(a.length / 2);
-    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
-  }
-
-  function stabilize(countsMap) {
-    // push to rolling history
-    const snapshot = { counts: new Map(countsMap), total: sumCounts(countsMap), ts: Date.now() };
-    history.push(snapshot);
-    if (history.length > HISTORY_WINDOW) history.shift();
-
-    // median per label over window
-    const labels = [...countsMap.keys()];
-    const medCounts = new Map();
-    for (const l of labels) {
-      const series = history.map(h => h.counts.get(l) || 0);
-      let v = Math.round(median(series));
-      if ( ENFORCE_MONOTONIC ) {
-        const prevMax = lastMaxSeen.get(l) ?? 0;
-        if (v < prevMax) v = prevMax;
-        lastMaxSeen.set(l, v);
-      }
-      medCounts.set(l, v);
-    }
-    return medCounts;
-  }
-
-  function sumCounts(map) {
-    let t = 0; for (const v of map.values()) t += v; return t;
-  }
-
   // --- CHART ---
   function ensureChart() {
     if (chart) return chart;
@@ -307,9 +268,8 @@
       const csv = await fetchCSV(CSV_URL);
       const parsed = parseCSV(csv);
       if (!parsed.labels.length) throw new Error('No rows parsed.');
-      // Apply stabilization to reduce flicker and prevent counts from decreasing
-      const stabilized = stabilize(parsed.counts);
-      updateChartFromMap(stabilized);
+      // Display the most recent CSV values directly (no stabilization)
+      updateChartFromMap(parsed.counts);
       lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
     } catch (err) {
       if (err.name === 'AbortError') return;
@@ -320,7 +280,7 @@
     }
   }
 
-  // Pause polling when tab hidden (reduces race/wobble)
+  // Pause polling when tab hidden
   let timer = null;
   function startTimer() { if (!timer) timer = setInterval(refreshChartData, POLL_MS); }
   function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
