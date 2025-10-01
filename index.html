@@ -10,31 +10,31 @@
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
     :root{
-      --bg:#0b0c10; --card:#151924; --ink:#eaf0ff; --muted:#a9b1c6; --accent:#7c5cff; --border:#263042;
+      /* Light theme */
+      --bg:#f8fafc; --card:#ffffff; --ink:#0f172a; --muted:#475569; --accent:#6b4eff; --border:#e5e7eb;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(180deg,#0b0c10,#0f1220 30%,#0b0c10);color:var(--ink)}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
     .wrap{max-width:1100px;margin:32px auto;padding:0 20px}
-    header{display:grid;gap:14px;margin-bottom:18px}
+    header{display:grid;gap:10px;margin-bottom:18px}
     h1{font-weight:800;letter-spacing:0.2px;margin:0;font-size:clamp(24px,2.4vw,36px)}
     .subtitle{color:var(--muted);font-size:1.05rem}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.25);overflow:hidden}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 6px 24px rgba(15,23,42,.06);overflow:hidden}
     .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:20px}
     @media (max-width: 960px){.grid{grid-template-columns:1fr;}}
-    .section{padding:18px}
-    .section h2{margin:0 0 10px 0;font-size:1.05rem;font-weight:700;color:#cbd5ff}
+    .section{padding:16px}
+    .section h2{margin:0 0 8px 0;font-size:1.05rem;font-weight:700;color:#334155}
     .muted{color:var(--muted)}
-    iframe{width:100%;height:720px;border:0;border-top-left-radius:18px;border-top-right-radius:18px}
-    .toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:14px 18px;border-top:1px solid var(--border);background:#101424}
-    .btn{appearance:none;border:1px solid var(--border);background:linear-gradient(180deg,#222a3a,#1a2131);color:#fff;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer;transition:.2s transform,.2s box-shadow}
+    iframe{width:100%;height:720px;border:0}
+    .toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border);background:#f3f4f6}
+    .btn{appearance:none;border:1px solid var(--border);background:#ffffff;color:#111827;border-radius:10px;padding:9px 12px;font-weight:600;cursor:pointer;transition:.2s transform,.2s box-shadow}
     .btn:active{transform:translateY(1px)}
-    .btn-outline{background:transparent}
     .small{font-size:.9rem;color:var(--muted)}
-    .chartWrap{padding:6px 12px 18px 12px}
+    .chartWrap{padding:8px 12px 16px 12px}
     canvas{width:100% !important;height:380px !important}
     .note{font-size:.95rem;color:var(--muted);line-height:1.55}
-    .pill{display:inline-block;background:#1e2536;color:#cbd5ff;border:1px solid var(--border);padding:4px 10px;border-radius:999px;font-size:.85rem;margin-right:8px}
+    .pill{display:inline-block;background:#eef2ff;color:#3730a3;border:1px solid #e0e7ff;padding:4px 10px;border-radius:999px;font-size:.85rem;margin-right:8px}
   </style>
 </head>
 <body>
@@ -48,9 +48,7 @@
     <div class="grid">
       <!-- Left: the Google Form -->
       <div class="card">
-        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true" title="ACCT 922 Form" allow="clipboard-write *;">
-          Loading…
-        </iframe>
+        <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSdV8foHKr1TfV8oSOcROai4MwfXtM5YzxrVgR-6EIDIHKZF2A/viewform?embedded=true" title="ACCT 922 Form" allow="clipboard-write *;"></iframe>
         <div class="toolbar">
           <div class="small">Submit above, then refresh the results on the right.</div>
           <button class="btn" id="refreshBoth">Refresh live results</button>
@@ -69,7 +67,6 @@
         <div class="toolbar">
           <div class="small" id="updatedAt">Last updated —</div>
           <div>
-            <button class="btn btn-outline" id="downloadCsv">Download CSV</button>
             <button class="btn" id="refreshBtn">Refresh</button>
           </div>
         </div>
@@ -90,13 +87,17 @@
       return u.toString();
     }
 
+    function looksAggregated(headers){
+      const lower = headers.map(h => (h||'').toLowerCase().trim());
+      const optionIdx = lower.findIndex(h => /^(option|choice|date)/.test(h));
+      const votesIdx = lower.findIndex(h => /(votes|count|responses?)/.test(h));
+      return optionIdx !== -1 && votesIdx !== -1 ? { optionIdx, votesIdx } : null;
+    }
+
     function detectChoiceColumn(headers){
-      // Try to select the column that looks like the poll question (avoid Timestamp)
       const lower = headers.map(h => h.toLowerCase());
-      // 1) contains preferred/date/option/choice
       let idx = lower.findIndex(h => /(preferred|date|option|choice)/.test(h) && !/timestamp/.test(h));
       if(idx !== -1) return idx;
-      // 2) last non-timestamp column
       for(let i=lower.length-1;i>=0;i--){
         if(!/timestamp/.test(lower[i]) && lower[i].trim()!== '') return i;
       }
@@ -117,9 +118,21 @@
     }
 
     function computeCounts(rows, headers){
+      const agg = looksAggregated(headers);
+      const counts = new Map();
+      if(agg){
+        state.labelColumn = headers[agg.optionIdx];
+        for(const row of rows){
+          const keys = Object.keys(row);
+          const label = row[keys[agg.optionIdx]]?.trim();
+          const val = parseInt(String(row[keys[agg.votesIdx]]||'').replace(/[^\d-]/g,''),10);
+          if(label && Number.isFinite(val)) counts.set(label, val);
+        }
+        return counts;
+      }
+      // Fallback: one response per row
       const choiceIdx = detectChoiceColumn(headers);
       state.labelColumn = headers[choiceIdx];
-      const counts = new Map();
       for(const row of rows){
         const keys = Object.keys(row);
         const label = row[keys[choiceIdx]]?.trim();
@@ -133,12 +146,7 @@
       const labels = Array.from(state.counts.keys());
       const data = Array.from(state.counts.values());
 
-      const ds = {
-        label: 'Responses',
-        data,
-        borderWidth: 1
-      };
-
+      const ds = { label: 'Votes Registered', data, borderWidth: 1 };
       const ctx = document.getElementById('resultsChart').getContext('2d');
       if(state.chart){ state.chart.destroy(); }
       state.chart = new Chart(ctx, {
@@ -146,12 +154,10 @@
         data: { labels, datasets: [ds] },
         options: {
           maintainAspectRatio: false,
-          scales: {
-            y: { beginAtZero: true, ticks: { precision:0 } }
-          },
+          scales: { y: { beginAtZero: true, ticks: { precision:0 } } },
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (ctx)=> `${ctx.parsed.y} response${ctx.parsed.y===1?'':'s'}` } },
+            tooltip: { callbacks: { label: (ctx)=> `${ctx.parsed.y} vote${ctx.parsed.y===1?'':'s'}` } },
             title: { display: true, text: state.labelColumn || 'Responses' }
           }
         }
@@ -170,7 +176,7 @@
         const took = Math.max(1, Math.round(performance.now()-start));
         document.getElementById('updatedAt').textContent = `Last updated — ${new Date().toLocaleString()} • ${took} ms`;
         const total = Array.from(state.counts.values()).reduce((a,b)=>a+b,0);
-        meta.textContent = `${total} total responses`;        
+        meta.textContent = `${total} total votes registered`;
       }catch(err){
         console.error(err);
         meta.textContent = 'Failed to fetch CSV. Please try again.';
@@ -179,13 +185,9 @@
 
     document.getElementById('refreshBtn').addEventListener('click', refresh);
     document.getElementById('refreshBoth').addEventListener('click', refresh);
-    document.getElementById('downloadCsv').addEventListener('click', ()=>{
-      window.open(CSV_URL, '_blank');
-    });
-
+    
     // Auto-refresh on first load
     refresh();
   </script>
 </body>
 </html>
- 
