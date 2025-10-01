@@ -142,151 +142,187 @@
   <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  // 1) CONFIG
+  // --- CONFIG ---
   const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
   const lastRefEl = document.getElementById('lastRef');
   const refreshBtn = document.getElementById('refreshBtn');
   const POLL_MS = 10000; // 10s
 
-  let chart;
-  let inFlight; // AbortController for overlap protection
+  // Canonical labels + aliases -> keeps bar order stable
+  const LABEL_ORDER = [
+    'Monday, November 17',
+    'Wednesday, November 19',
+    'Either date works'
+  ];
+  const ALIASES = new Map([
+    [/^mon(day)?[, ]*nov(ember)?\.?\s*17/i, 'Monday, November 17'],
+    [/^wed(nesday)?[, ]*nov(ember)?\.?\s*19/i, 'Wednesday, November 19'],
+    [/either/i, 'Either date works'],
+  ]);
 
-  // 2) FETCH CSV (cache-busted, with overlap protection)
+  // Anti-flicker settings
+  const HISTORY_WINDOW = 3;         // median over last 3 pulls
+  const ENFORCE_MONOTONIC = true;   // counts cannot go down per label
+
+  let chart;
+  let inFlight; // AbortController
+  const history = []; // array of { counts: Map<label, number>, total, ts }
+  const lastMaxSeen = new Map(); // per-label maximum (for monotonic)
+
+  // --- FETCH (overlap-safe, cache-busted) ---
   async function fetchCSV(url) {
     if (inFlight) inFlight.abort();
     inFlight = new AbortController();
-
     const u = new URL(url);
-    u.searchParams.set('cb', Date.now()); // cache-buster
+    u.searchParams.set('cb', Date.now());
 
-    let res;
-    try {
-      res = await fetch(u.toString(), {
-        cache: 'no-store',
-        signal: inFlight.signal,
-        // mode: 'cors' // implicit; leave as default
-      });
-    } catch (e) {
-      if (e.name === 'AbortError') throw e;
-      // Commonly CORS or network
-      throw new Error('Network/CORS error fetching CSV. Is the sheet published to the web?');
-    }
-
-    if (!res.ok) {
-      throw new Error(`CSV fetch failed: HTTP ${res.status}`);
-    }
+    const res = await fetch(u.toString(), { cache: 'no-store', signal: inFlight.signal });
+    if (!res.ok) throw new Error(`CSV fetch failed: HTTP ${res.status}`);
     return res.text();
   }
 
-  // 3) ROBUST CSV PARSER
-  // - Handles commas in quotes and escaped quotes ("")
-  // - Returns first two columns if headers aren't recognized
-  function parseCSV(text) {
-    const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
-    if (lines.length === 0) return { labels: [], values: [] };
-
-    const split = (line) => {
-      const out = [];
-      let cur = '';
-      let q = false;
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (ch === '"') {
-          const next = line[i + 1];
-          if (q && next === '"') { cur += '"'; i++; continue; } // escaped quote
-          q = !q;
-          continue;
-        }
-        if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
-        cur += ch;
+  // --- CSV PARSER (robust quotes) ---
+  function splitCSV(line) {
+    const out = [];
+    let cur = '', q = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        const next = line[i + 1];
+        if (q && next === '"') { cur += '"'; i++; continue; } // escaped quote
+        q = !q; continue;
       }
-      out.push(cur);
-      return out.map(s => s.trim());
-    };
-
-    const header = split(lines[0]);
-    const rows = lines.slice(1).map(split);
-
-    const idxLabelGuess = header.findIndex(c => /^(option|choice|date)$/i.test(c));
-    const idxValueGuess = header.findIndex(c => /(vote|count|responses?|tally|#)/i.test(c));
-
-    const idxLabel = idxLabelGuess >= 0 ? idxLabelGuess : 0;
-    const idxValue = idxValueGuess >= 0 ? idxValueGuess : 1;
-
-    const labels = [];
-    const values = [];
-
-    for (const parts of rows) {
-      const lbl = parts[idxLabel] ?? '';
-      const valRaw = parts[idxValue] ?? '0';
-      const num = Number(String(valRaw).replace(/[^0-9.-]/g, ''));
-      if (lbl !== '' && Number.isFinite(num)) {
-        labels.push(lbl);
-        values.push(num);
-      }
+      if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
+      cur += ch;
     }
-
-    return { labels, values };
+    out.push(cur);
+    return out.map(s => s.trim());
   }
 
+  function parseCSV(text) {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
+    if (!lines.length) return { labels: [], values: [] };
+
+    const header = splitCSV(lines[0]);
+    const rows = lines.slice(1).map(splitCSV);
+
+    const idxLabel = header.findIndex(c => /option|choice|date/i.test(c));
+    const idxValue = header.findIndex(c => /vote|count|responses?|tally|#/i.test(c));
+    const li = idxLabel >= 0 ? idxLabel : 0;
+    const vi = idxValue >= 0 ? idxValue : 1;
+
+    // normalize labels via aliases
+    const norm = (s='') => {
+      for (const [re, target] of ALIASES) if (re.test(s)) return target;
+      return s;
+    };
+
+    // aggregate counts by canonical label
+    const counts = new Map(LABEL_ORDER.map(l => [l, 0]));
+    for (const parts of rows) {
+      const rawL = parts[li] ?? '';
+      const rawV = parts[vi] ?? '0';
+      const val = Number(String(rawV).replace(/[^0-9.-]/g, '')) || 0;
+      const label = norm(rawL);
+      if (!counts.has(label)) counts.set(label, 0); // allow unexpected label
+      counts.set(label, (counts.get(label) || 0) + val);
+    }
+
+    // build ordered arrays (unknown labels appended)
+    const ordered = [...LABEL_ORDER, ...[...counts.keys()].filter(k => !LABEL_ORDER.includes(k))];
+    return {
+      labels: ordered,
+      values: ordered.map(l => counts.get(l) || 0),
+      counts
+    };
+  }
+
+  // --- STABILIZE (median + monotonic) ---
+  function median(nums) {
+    const a = [...nums].sort((x, y) => x - y);
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  }
+
+  function stabilize(countsMap) {
+    // push to rolling history
+    const snapshot = { counts: new Map(countsMap), total: sumCounts(countsMap), ts: Date.now() };
+    history.push(snapshot);
+    if (history.length > HISTORY_WINDOW) history.shift();
+
+    // median per label over window
+    const labels = [...countsMap.keys()];
+    const medCounts = new Map();
+    for (const l of labels) {
+      const series = history.map(h => h.counts.get(l) || 0);
+      let v = Math.round(median(series));
+      if ( ENFORCE_MONOTONIC ) {
+        const prevMax = lastMaxSeen.get(l) ?? 0;
+        if (v < prevMax) v = prevMax;
+        lastMaxSeen.set(l, v);
+      }
+      medCounts.set(l, v);
+    }
+    return medCounts;
+  }
+
+  function sumCounts(map) {
+    let t = 0; for (const v of map.values()) t += v; return t;
+  }
+
+  // --- CHART ---
   function ensureChart() {
-    const ctx = document.getElementById('resultsChart').getContext('2d');
     if (chart) return chart;
+    const ctx = document.getElementById('resultsChart').getContext('2d');
     chart = new Chart(ctx, {
       type: 'bar',
-      data: {
-        labels: [],
-        datasets: [{ label: 'Responses', data: [] }]
-      },
+      data: { labels: [], datasets: [{ label: 'Responses', data: [] }] },
       options: {
         responsive: true,
         animation: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { mode: 'index', intersect: false }
-        },
-        scales: {
-          y: { beginAtZero: true, ticks: { precision: 0 } }
-        }
+        plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
     });
     return chart;
   }
 
-  // 4) RENDER / UPDATE
-  function updateChart({ labels, values }) {
+  function updateChartFromMap(map) {
+    const ordered = [...LABEL_ORDER, ...[...map.keys()].filter(k => !LABEL_ORDER.includes(k))];
     const ch = ensureChart();
-    ch.data.labels = labels;
-    ch.data.datasets[0].data = values;
+    ch.data.labels = ordered;
+    ch.data.datasets[0].data = ordered.map(l => map.get(l) || 0);
     ch.update();
   }
 
-  // 5) REFRESH LOOP
+  // --- REFRESH LOOP ---
   async function refreshChartData() {
     try {
       const csv = await fetchCSV(CSV_URL);
       const parsed = parseCSV(csv);
-
-      if (!parsed.labels.length || !parsed.values.length) {
-        throw new Error('No rows parsed. Check that your published sheet has two columns (labels + numeric counts).');
-      }
-
-      updateChart(parsed);
+      if (!parsed.labels.length) throw new Error('No rows parsed.');
+      const stable = stabilize(parsed.counts);
+      updateChartFromMap(stable);
       lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
     } catch (err) {
-      if (err.name === 'AbortError') return; // a new fetch started; ignore
+      if (err.name === 'AbortError') return;
       lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
-      // Optionally, keep last good chart data instead of clearing
     }
   }
 
+  // Pause polling when tab hidden (reduces race/wobble)
+  let timer = null;
+  function startTimer() { if (!timer) timer = setInterval(refreshChartData, POLL_MS); }
+  function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
+
   refreshBtn.addEventListener('click', refreshChartData);
-  setInterval(refreshChartData, POLL_MS);
-  window.addEventListener('load', () => setTimeout(refreshChartData, 300));
+  window.addEventListener('load', () => { setTimeout(refreshChartData, 300); startTimer(); });
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refreshChartData();
+    if (document.hidden) { stopTimer(); }
+    else { refreshChartData(); startTimer(); }
   });
 </script>
+
 
 </body>
 </html>
