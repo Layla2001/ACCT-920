@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <title>ACCT 922 — Final Presentation Poll (Fall 2025)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Disable caching -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -116,7 +122,7 @@
       <header><h2>Live Results</h2></header>
       <div class="content">
         <div class="toolbar">
-          <button id="refreshBtn" class="btn" title="Force refresh">Refresh chart</button>
+          <button id="refreshBtn" class="btn" title="Fetch latest CSV">Refresh chart</button>
           <span class="meta" id="lastRef">Last refresh: never</span>
         </div>
 
@@ -140,169 +146,153 @@
   </main>
 
   <!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-  // --- CONFIG ---
-  const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
-  const lastRefEl = document.getElementById('lastRef');
-  const refreshBtn = document.getElementById('refreshBtn');
-  const POLL_MS = 10000; // 10s
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // --- CONFIG ---
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
+    const lastRefEl = document.getElementById('lastRef');
+    const refreshBtn = document.getElementById('refreshBtn');
 
-  // Canonical labels + aliases -> keeps bar order stable
-  const LABEL_ORDER = [
-    'Monday, November 17',
-    'Wednesday, November 19',
-    'Either date works'
-  ];
-  const ALIASES = new Map([
-    [/^mon(day)?[, ]*nov(ember)?\.?\s*17/i, 'Monday, November 17'],
-    [/^wed(nesday)?[, ]*nov(ember)?\.?\s*19/i, 'Wednesday, November 19'],
-    [/either/i, 'Either date works'],
-  ]);
+    // Canonical labels + aliases -> keeps bar order stable
+    const LABEL_ORDER = [
+      'Monday, November 17',
+      'Wednesday, November 19',
+      'Either date works'
+    ];
+    const ALIASES = new Map([
+      [/^mon(day)?[, ]*nov(ember)?\.?\s*17/i, 'Monday, November 17'],
+      [/^wed(nesday)?[, ]*nov(ember)?\.?\s*19/i, 'Wednesday, November 19'],
+      [/either/i, 'Either date works'],
+    ]);
 
-  let chart;
-  let inFlight; // AbortController
-  let isFetching = false;
-  let timer = null;
+    let chart;        // single Chart.js instance
+    let inFlight;     // AbortController for safe replacing fetches
+    let isFetching = false;
 
-  // --- FETCH (overlap-safe, cache-busted) ---
-  async function fetchCSV(url) {
-    if (inFlight) inFlight.abort();
-    inFlight = new AbortController();
-    const u = new URL(url);
-    u.searchParams.set('cb', Date.now());
+    // --- FETCH (fresh only) ---
+    async function fetchCSVFresh(url) {
+      if (inFlight) inFlight.abort();
+      inFlight = new AbortController();
+      const u = new URL(url);
+      // hard cache-bust
+      u.searchParams.set('cb', Date.now().toString());
 
-    const res = await fetch(u.toString(), { cache: 'no-store', signal: inFlight.signal });
-    if (!res.ok) throw new Error(`CSV fetch failed: HTTP ${res.status}`);
-    return res.text();
-  }
-
-  // --- CSV PARSER (robust quotes) ---
-  function splitCSV(line) {
-    const out = [];
-    let cur = '', q = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        const next = line[i + 1];
-        if (q && next === '"') { cur += '"'; i++; continue; } // escaped quote
-        q = !q; continue;
-      }
-      if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
-      cur += ch;
+      const res = await fetch(u.toString(), { cache: 'no-store', signal: inFlight.signal });
+      if (!res.ok) throw new Error(`CSV fetch failed: HTTP ${res.status}`);
+      return res.text();
     }
-    out.push(cur);
-    return out.map(s => s.trim());
-  }
 
-  function parseCSV(text) {
-    const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
-    if (!lines.length) return { labels: [], values: [], counts: new Map() };
-
-    const header = splitCSV(lines[0]);
-    const rows = lines.slice(1).map(splitCSV);
-
-    const idxLabel = header.findIndex(c => /option|choice|date/i.test(c));
-    const idxValue = header.findIndex(c => /vote|count|responses?|tally|#/i.test(c));
-    const li = idxLabel >= 0 ? idxLabel : 0;
-    const vi = idxValue >= 0 ? idxValue : 1;
-
-    const norm = (s='') => {
-      for (const [re, target] of ALIASES) if (re.test(s)) return target;
-      return s;
-    };
-
-    const counts = new Map(LABEL_ORDER.map(l => [l, 0]));
-    for (const parts of rows) {
-      const rawL = parts[li] ?? '';
-      const rawV = parts[vi] ?? '0';
-      const val = Number(String(rawV).replace(/[^0-9.-]/g, '')) || 0;
-      const label = norm(rawL);
-      if (!counts.has(label)) counts.set(label, 0);
-      counts.set(label, (counts.get(label) || 0) + val);
-    }
-    return { counts };
-  }
-
-  // --- CHART ---
-  function ensureChart() {
-    if (chart) return chart;
-    const ctx = document.getElementById('resultsChart').getContext('2d');
-    chart = new Chart(ctx, {
-      type: 'bar',
-      data: { labels: [], datasets: [{ label: 'Responses', data: [] }] },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        normalized: true,      // small perf win
-        parsing: false,        // we feed plain arrays
-        plugins: {
-          legend: { display: false },
-          tooltip: { mode: 'index', intersect: false }
-        },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    // --- CSV PARSER (handles quoted fields/commas) ---
+    function splitCSV(line) {
+      const out = [];
+      let cur = '', q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          const next = line[i + 1];
+          if (q && next === '"') { cur += '"'; i++; continue; } // escaped quote
+          q = !q; continue;
+        }
+        if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
+        cur += ch;
       }
+      out.push(cur);
+      return out.map(s => s.trim());
+    }
+
+    function parseCSV(text) {
+      const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
+      if (!lines.length) return { counts: new Map() };
+
+      const header = splitCSV(lines[0]);
+      const rows = lines.slice(1).map(splitCSV);
+
+      const idxLabel = header.findIndex(c => /option|choice|date/i.test(c));
+      const idxValue = header.findIndex(c => /vote|count|responses?|tally|#/i.test(c));
+      const li = idxLabel >= 0 ? idxLabel : 0;
+      const vi = idxValue >= 0 ? idxValue : 1;
+
+      const norm = (s='') => {
+        for (const [re, target] of ALIASES) if (re.test(s)) return target;
+        return s;
+      };
+
+      const counts = new Map(LABEL_ORDER.map(l => [l, 0]));
+      for (const parts of rows) {
+        const rawL = parts[li] ?? '';
+        const rawV = parts[vi] ?? '0';
+        const val = Number(String(rawV).replace(/[^0-9.-]/g, '')) || 0;
+        const label = norm(rawL);
+        if (!counts.has(label)) counts.set(label, 0); // include unexpected label
+        counts.set(label, (counts.get(label) || 0) + val);
+      }
+      return { counts };
+    }
+
+    // --- CHART ---
+    function ensureChart() {
+      if (chart) return chart;
+      const ctx = document.getElementById('resultsChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [], datasets: [{ label: 'Responses', data: [] }] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,         // no animation on updates
+          normalized: true,
+          parsing: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+      });
+      return chart;
+    }
+
+    function updateChartFromMap(map) {
+      // stable order: known labels first, then any extras alphabetical
+      const extras = [...map.keys()].filter(k => !LABEL_ORDER.includes(k)).sort((a,b)=>a.localeCompare(b));
+      const ordered = [...LABEL_ORDER, ...extras];
+
+      const ch = ensureChart();
+      ch.data.labels = ordered;
+      ch.data.datasets[0].data = ordered.map(l => map.get(l) ?? 0);
+      ch.update();
+    }
+
+    // --- ONE-SHOT REFRESH ---
+    async function refreshChartData() {
+      if (isFetching) return;
+      isFetching = true;
+      refreshBtn.disabled = true;
+      lastRefEl.textContent = 'Refreshing…';
+      try {
+        const csv = await fetchCSVFresh(CSV_URL);
+        const { counts } = parseCSV(csv);
+        updateChartFromMap(counts);
+        lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
+      } finally {
+        refreshBtn.disabled = false;
+        isFetching = false;
+      }
+    }
+
+    // --- INIT (only on new page open or manual Refresh) ---
+    window.addEventListener('DOMContentLoaded', () => {
+      ensureChart();      // create once
+      refreshChartData(); // fetch fresh CSV once on load
     });
-    return chart;
-  }
 
-  function updateChartFromMap(map) {
-    // stable order: known labels first, then any unexpected ones in alpha order
-    const extras = [...map.keys()].filter(k => !LABEL_ORDER.includes(k)).sort((a,b)=>a.localeCompare(b));
-    const ordered = [...LABEL_ORDER, ...extras];
-
-    const ch = ensureChart();
-    ch.data.labels = ordered;
-    ch.data.datasets[0].data = ordered.map(l => map.get(l) ?? 0);
-    ch.update();
-  }
-
-  // --- REFRESH LOOP ---
-  async function refreshChartData() {
-    if (isFetching) return; // Prevent overlap
-    isFetching = true;
-    refreshBtn.disabled = true;
-    lastRefEl.textContent = "Refreshing…";
-    try {
-      const csv = await fetchCSV(CSV_URL);
-      const parsed = parseCSV(csv);
-      updateChartFromMap(parsed.counts);
-      lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
-    } finally {
-      refreshBtn.disabled = false;
-      isFetching = false;
-    }
-  }
-
-  function startTimer() { if (!timer) timer = setInterval(refreshChartData, POLL_MS); }
-  function stopTimer()  { if (timer) { clearInterval(timer); timer = null; } }
-
-  // --- UI HANDLERS ---
-  refreshBtn.addEventListener('click', () => {
-    refreshChartData();
-    stopTimer();
-    startTimer();
-  });
-
-  // Pause polling when tab hidden
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) stopTimer();
-    else { refreshChartData(); startTimer(); }
-  });
-
-  // --- INITIALIZE ON FIRST OPEN ---
-  window.addEventListener('DOMContentLoaded', () => {
-    ensureChart();          // create once
-    refreshChartData();     // immediate first render
-    startTimer();           // then poll
-  });
-</script>
-
-
-
+    refreshBtn.addEventListener('click', () => {
+      // Re-fetch once (also cache-busted)
+      refreshChartData();
+    });
+  </script>
 </body>
 </html>
