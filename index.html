@@ -119,16 +119,15 @@
           <button id="refreshBtn" class="btn" title="Force refresh">Refresh chart</button>
           <span class="meta" id="lastRef">Last refresh: never</span>
         </div>
-        <div class="chartShell">
-          <img
-            id="liveChart"
-            alt="Live chart"
-            loading="lazy"
-            src="https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pubchart?oid=557204739&format=interactive"
-          />
-        </div>
-        <div class="meta">Updates every 30 seconds while the page is open.</div>
-      </div>
+<div class="chartShell">
+  <iframe
+    id="liveChartFrame"
+    title="Live chart (interactive)"
+    style="width:100%; min-height:420px; border:0; border-radius:10px;"
+    src="https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pubchart?oid=557204739&format=interactive"
+    allowfullscreen
+  ></iframe>
+</div>
     </section>
 
     <!-- Form -->
@@ -145,16 +144,17 @@
   </main>
 
   <script>
-    const img = document.getElementById('liveChart');
-    const lastRef = document.getElementById('lastRef');
+  const frame = document.getElementById('liveChartFrame');
+  const lastRef = document.getElementById('lastRef');
 
-    function refreshChart() {
-      const u = new URL(img.src);
-      u.searchParams.set('cb', Date.now()); // cache-buster
-      img.src = u.toString();
-      lastRef.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-    }
+  function refreshChart() {
+    const u = new URL(frame.src);
+    u.searchParams.set('cb', Date.now()); // cache-buster
+    frame.src = u.toString();
+    lastRef.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+  }
 
-    document.getElementById('refreshBtn').addEventListener('click', refreshChart);
-    setInterval(refreshChart, 30000);
-    window
+  document.getElementById('refreshBtn').addEventListener('click', refreshChart);
+  setInterval(refreshChart, 30000);
+  window.addEventListener('load', () => setTimeout(refreshChart, 300));
+</script>
