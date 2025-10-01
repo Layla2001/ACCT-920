@@ -86,7 +86,7 @@
       background: #fbfbfe; border: 1px solid #eceef8; border-radius: 14px;
       padding: 14px; min-height: 280px;
     }
-    #liveChart { width: 100%; height: auto; display: block; border-radius: 10px; }
+    #resultsChart { width: 100%; height: 420px; display: block; border-radius: 10px; }
     iframe {
       width: 100%; border: 0; background: #fff; border-radius: 14px;
       min-height: 1200px;
@@ -119,11 +119,11 @@
           <button id="refreshBtn" class="btn" title="Force refresh">Refresh chart</button>
           <span class="meta" id="lastRef">Last refresh: never</span>
         </div>
-<div class="chartShell">
-  <canvas id="resultsChart"></canvas>
-</div>
 
-        </div> 
+        <div class="chartShell">
+          <canvas id="resultsChart"></canvas>
+        </div>
+      </div>
     </section>
 
     <!-- Form -->
@@ -139,107 +139,113 @@
     </section>
   </main>
 
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-  const frame = document.getElementById('liveChartFrame');
-  const lastRef = document.getElementById('lastRef');
+    // 1) CONFIG
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
+    const lastRefEl = document.getElementById('lastRef');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const POLL_MS = 10000; // 10s
 
-  function refreshChart() {
-    const u = new URL(frame.src);
-    u.searchParams.set('cb', Date.now()); // cache-buster
-    frame.src = u.toString();
-    lastRef.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-  }
+    let chart;
 
-  document.getElementById('refreshBtn').addEventListener('click', refreshChart);
-  setInterval(refreshChart, 30000);
-  window.addEventListener('load', () => setTimeout(refreshChart, 300));
-</script>
-
-  
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-  const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
-  const lastRef = document.getElementById('lastRef');
-  const btn = document.getElementById('refreshBtn');
-
-  let chart;
-
-  async function fetchCSV(url) {
-    const u = new URL(url);
-    u.searchParams.set('cb', Date.now()); // bust any proxies/CDNs
-    const res = await fetch(u.toString(), { cache: 'no-store' });
-    const text = await res.text();
-    return text;
-  }
-
-  function parseCSV(text) {
-    // Expecting headers like: Option, Votes
-    const lines = text.trim().split(/\r?\n/);
-    const [header, ...rows] = lines;
-    const cols = header.split(',');
-    const idxLabel = cols.findIndex(c => /option/i.test(c));
-    const idxValue = cols.findIndex(c => /vote|count|responses?/i.test(c));
-    const labels = [];
-    const values = [];
-    rows.forEach(line => {
-      const parts = line.split(',');
-      if (parts.length >= 2) {
-        labels.push(parts[idxLabel >= 0 ? idxLabel : 0].replace(/^"|"$/g,''));
-        values.push(Number(parts[idxValue >= 0 ? idxValue : 1]) || 0);
-      }
-    });
-    return { labels, values };
-  }
-
-  function renderChart(data) {
-    const ctx = document.getElementById('resultsChart').getContext('2d');
-    if (chart) {
-      chart.data.labels = data.labels;
-      chart.data.datasets[0].data = data.values;
-      chart.update();
-      return;
+    // 2) FETCH CSV (with cache-buster)
+    async function fetchCSV(url) {
+      const u = new URL(url);
+      u.searchParams.set('cb', Date.now());
+      const res = await fetch(u.toString(), { cache: 'no-store' });
+      if (!res.ok) throw new Error('CSV fetch failed: ' + res.status);
+      return res.text();
     }
-    chart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: data.labels,
-        datasets: [{ label: 'Responses', data: data.values }]
-      },
-      options: {
-        responsive: true,
-        animation: false,
-        plugins: {
-          legend: { display: false },
-          tooltip: { mode: 'index', intersect: false }
-        },
-        scales: {
-          y: { beginAtZero: true, ticks: { precision: 0 } }
+
+    // 3) LIGHT CSV PARSER (assumes simple 2-column CSV)
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length === 0) return { labels: [], values: [] };
+
+      const [header, ...rows] = lines;
+      // handle quoted commas lightly
+      const split = (line) => {
+        const out = [];
+        let cur = '';
+        let q = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch === '"') { q = !q; continue; }
+          if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
+          cur += ch;
         }
-      }
-    });
-  }
+        out.push(cur);
+        return out.map(s => s.trim().replace(/^"|"$/g,''));
+      };
 
-  async function refreshChart() {
-    try {
-      const csv = await fetchCSV(CSV_URL);
-      const parsed = parseCSV(csv);
-      renderChart(parsed);
-      lastRef.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-    } catch (e) {
-      lastRef.textContent = 'Last refresh failed at ' + new Date().toLocaleTimeString();
-      // Optional: console.error(e);
+      const cols = split(header);
+      const idxLabel = cols.findIndex(c => /option|choice|date/i.test(c));
+      const idxValue = cols.findIndex(c => /vote|count|responses?|tally/i.test(c));
+
+      const labels = [];
+      const values = [];
+      rows.forEach(line => {
+        if (!line.trim()) return;
+        const parts = split(line);
+        const label = parts[idxLabel >= 0 ? idxLabel : 0] ?? '';
+        const value = Number(parts[idxValue >= 0 ? idxValue : 1] ?? 0) || 0;
+        labels.push(label);
+        values.push(value);
+      });
+
+      return { labels, values };
     }
-  }
 
-  btn.addEventListener('click', refreshChart);
-  let timer = setInterval(refreshChart, 10000);
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) refreshChart();
-  });
-  window.addEventListener('load', () => setTimeout(refreshChart, 300));
-</script>
-  
-  </main>
+    // 4) RENDER / UPDATE CHART
+    function renderChart(data) {
+      const ctx = document.getElementById('resultsChart').getContext('2d');
+      if (chart) {
+        chart.data.labels = data.labels;
+        chart.data.datasets[0].data = data.values;
+        chart.update();
+        return;
+      }
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: data.labels,
+          datasets: [{ label: 'Responses', data: data.values }]
+        },
+        options: {
+          responsive: true,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } }
+          }
+        }
+      });
+    }
+
+    // 5) REFRESH LOOP
+    async function refreshChartData() {
+      try {
+        const csv = await fetchCSV(CSV_URL);
+        const parsed = parseCSV(csv);
+        renderChart(parsed);
+        lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+      } catch (err) {
+        lastRefEl.textContent = 'Last refresh failed at ' + new Date().toLocaleTimeString();
+        // console.error(err);
+      }
+    }
+
+    refreshBtn.addEventListener('click', refreshChartData);
+    setInterval(refreshChartData, POLL_MS);
+    window.addEventListener('load', () => setTimeout(refreshChartData, 300));
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshChartData();
+    });
+  </script>
 </body>
 </html>
-
