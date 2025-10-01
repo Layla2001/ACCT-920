@@ -140,112 +140,153 @@
   </main>
 
   <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script>
-    // 1) CONFIG
-    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
-    const lastRefEl = document.getElementById('lastRef');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const POLL_MS = 10000; // 10s
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  // 1) CONFIG
+  const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSNunski5yKvFXexjpUrN7gPT5tQPcMiIUaaq_-wm3GjqAQTrrupDw1nK_oxOMQF6xcR_Dn0OWzEREq/pub?gid=1250869048&single=true&output=csv';
+  const lastRefEl = document.getElementById('lastRef');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const POLL_MS = 10000; // 10s
 
-    let chart;
+  let chart;
+  let inFlight; // AbortController for overlap protection
 
-    // 2) FETCH CSV (with cache-buster)
-    async function fetchCSV(url) {
-      const u = new URL(url);
-      u.searchParams.set('cb', Date.now());
-      const res = await fetch(u.toString(), { cache: 'no-store' });
-      if (!res.ok) throw new Error('CSV fetch failed: ' + res.status);
-      return res.text();
-    }
+  // 2) FETCH CSV (cache-busted, with overlap protection)
+  async function fetchCSV(url) {
+    if (inFlight) inFlight.abort();
+    inFlight = new AbortController();
 
-    // 3) LIGHT CSV PARSER (assumes simple 2-column CSV)
-    function parseCSV(text) {
-      const lines = text.trim().split(/\r?\n/);
-      if (lines.length === 0) return { labels: [], values: [] };
+    const u = new URL(url);
+    u.searchParams.set('cb', Date.now()); // cache-buster
 
-      const [header, ...rows] = lines;
-      // handle quoted commas lightly
-      const split = (line) => {
-        const out = [];
-        let cur = '';
-        let q = false;
-        for (let i = 0; i < line.length; i++) {
-          const ch = line[i];
-          if (ch === '"') { q = !q; continue; }
-          if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
-          cur += ch;
-        }
-        out.push(cur);
-        return out.map(s => s.trim().replace(/^"|"$/g,''));
-      };
-
-      const cols = split(header);
-      const idxLabel = cols.findIndex(c => /option|choice|date/i.test(c));
-      const idxValue = cols.findIndex(c => /vote|count|responses?|tally/i.test(c));
-
-      const labels = [];
-      const values = [];
-      rows.forEach(line => {
-        if (!line.trim()) return;
-        const parts = split(line);
-        const label = parts[idxLabel >= 0 ? idxLabel : 0] ?? '';
-        const value = Number(parts[idxValue >= 0 ? idxValue : 1] ?? 0) || 0;
-        labels.push(label);
-        values.push(value);
+    let res;
+    try {
+      res = await fetch(u.toString(), {
+        cache: 'no-store',
+        signal: inFlight.signal,
+        // mode: 'cors' // implicit; leave as default
       });
-
-      return { labels, values };
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      // Commonly CORS or network
+      throw new Error('Network/CORS error fetching CSV. Is the sheet published to the web?');
     }
 
-    // 4) RENDER / UPDATE CHART
-    function renderChart(data) {
-      const ctx = document.getElementById('resultsChart').getContext('2d');
-      if (chart) {
-        chart.data.labels = data.labels;
-        chart.data.datasets[0].data = data.values;
-        chart.update();
-        return;
+    if (!res.ok) {
+      throw new Error(`CSV fetch failed: HTTP ${res.status}`);
+    }
+    return res.text();
+  }
+
+  // 3) ROBUST CSV PARSER
+  // - Handles commas in quotes and escaped quotes ("")
+  // - Returns first two columns if headers aren't recognized
+  function parseCSV(text) {
+    const lines = text.replace(/\r\n?/g, '\n').split('\n').filter(l => l.trim().length);
+    if (lines.length === 0) return { labels: [], values: [] };
+
+    const split = (line) => {
+      const out = [];
+      let cur = '';
+      let q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          const next = line[i + 1];
+          if (q && next === '"') { cur += '"'; i++; continue; } // escaped quote
+          q = !q;
+          continue;
+        }
+        if (ch === ',' && !q) { out.push(cur); cur = ''; continue; }
+        cur += ch;
       }
-      chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: data.labels,
-          datasets: [{ label: 'Responses', data: data.values }]
+      out.push(cur);
+      return out.map(s => s.trim());
+    };
+
+    const header = split(lines[0]);
+    const rows = lines.slice(1).map(split);
+
+    const idxLabelGuess = header.findIndex(c => /^(option|choice|date)$/i.test(c));
+    const idxValueGuess = header.findIndex(c => /(vote|count|responses?|tally|#)/i.test(c));
+
+    const idxLabel = idxLabelGuess >= 0 ? idxLabelGuess : 0;
+    const idxValue = idxValueGuess >= 0 ? idxValueGuess : 1;
+
+    const labels = [];
+    const values = [];
+
+    for (const parts of rows) {
+      const lbl = parts[idxLabel] ?? '';
+      const valRaw = parts[idxValue] ?? '0';
+      const num = Number(String(valRaw).replace(/[^0-9.-]/g, ''));
+      if (lbl !== '' && Number.isFinite(num)) {
+        labels.push(lbl);
+        values.push(num);
+      }
+    }
+
+    return { labels, values };
+  }
+
+  function ensureChart() {
+    const ctx = document.getElementById('resultsChart').getContext('2d');
+    if (chart) return chart;
+    chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [],
+        datasets: [{ label: 'Responses', data: [] }]
+      },
+      options: {
+        responsive: true,
+        animation: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
         },
-        options: {
-          responsive: true,
-          animation: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { mode: 'index', intersect: false }
-          },
-          scales: {
-            y: { beginAtZero: true, ticks: { precision: 0 } }
-          }
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 } }
         }
-      });
-    }
-
-    // 5) REFRESH LOOP
-    async function refreshChartData() {
-      try {
-        const csv = await fetchCSV(CSV_URL);
-        const parsed = parseCSV(csv);
-        renderChart(parsed);
-        lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
-      } catch (err) {
-        lastRefEl.textContent = 'Last refresh failed at ' + new Date().toLocaleTimeString();
-        // console.error(err);
       }
-    }
-
-    refreshBtn.addEventListener('click', refreshChartData);
-    setInterval(refreshChartData, POLL_MS);
-    window.addEventListener('load', () => setTimeout(refreshChartData, 300));
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) refreshChartData();
     });
-  </script>
+    return chart;
+  }
+
+  // 4) RENDER / UPDATE
+  function updateChart({ labels, values }) {
+    const ch = ensureChart();
+    ch.data.labels = labels;
+    ch.data.datasets[0].data = values;
+    ch.update();
+  }
+
+  // 5) REFRESH LOOP
+  async function refreshChartData() {
+    try {
+      const csv = await fetchCSV(CSV_URL);
+      const parsed = parseCSV(csv);
+
+      if (!parsed.labels.length || !parsed.values.length) {
+        throw new Error('No rows parsed. Check that your published sheet has two columns (labels + numeric counts).');
+      }
+
+      updateChart(parsed);
+      lastRefEl.textContent = 'Last refresh: ' + new Date().toLocaleTimeString();
+    } catch (err) {
+      if (err.name === 'AbortError') return; // a new fetch started; ignore
+      lastRefEl.textContent = 'Last refresh failed: ' + err.message + ' — ' + new Date().toLocaleTimeString();
+      // Optionally, keep last good chart data instead of clearing
+    }
+  }
+
+  refreshBtn.addEventListener('click', refreshChartData);
+  setInterval(refreshChartData, POLL_MS);
+  window.addEventListener('load', () => setTimeout(refreshChartData, 300));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshChartData();
+  });
+</script>
+
 </body>
 </html>
